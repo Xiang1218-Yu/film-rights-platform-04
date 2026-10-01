@@ -1,6 +1,11 @@
 export type ProjectStatus = 'development' | 'production' | 'post' | 'delivered';
 export type AssetType = 'master' | 'trailer' | 'poster' | 'audio' | 'subtitle';
 export type ApprovalStatus = 'pending' | 'approved' | 'rejected';
+export const APPROVAL_DECISIONS = ['approved', 'rejected'] as const;
+export type ApprovalDecision = (typeof APPROVAL_DECISIONS)[number];
+export function isApprovalDecision(value: unknown): value is ApprovalDecision {
+  return typeof value === 'string' && (APPROVAL_DECISIONS as readonly string[]).includes(value);
+}
 
 export interface Project { id: string; code: string; title: string; season: number; status: ProjectStatus; currency: string; budgetVersionId: string; deliveryDate: string; }
 export interface BudgetLine { id: string; projectId: string; category: string; subcategory: string; planned: number; committed: number; actual: number; forecast: number; owner: string; risk: 'low' | 'medium' | 'high'; }
@@ -64,8 +69,8 @@ export function rightsConflicts(projectId = projects[0].id) {
   return conflicts;
 }
 
-export function approve(id: string, status: ApprovalStatus, comment = '') {
-  const item = approvals.find(approval => approval.id === id); if (!item) return undefined;
+export function approve(id: string, status: ApprovalDecision, comment = '') {
+  const item = approvals.find(approval => approval.id === id); if (!item || !isApprovalDecision(status)) return undefined;
   item.status = status; item.comment = comment; auditEvents.unshift({ id: `AUD-${Date.now()}`, action: status.toUpperCase(), entity: item.entityType, entityId: item.entityId, actor: '当前审批人', at: new Date().toISOString(), details: comment || `${item.title} 已${status === 'approved' ? '通过' : '驳回'}` }); return item;
 }
 export function createApproval(input: Pick<Approval, 'projectId' | 'entityType' | 'entityId' | 'title' | 'requestedBy' | 'approver'>) { const item: Approval = { ...input, id: `APR-${Date.now()}`, status: 'pending', createdAt: new Date().toISOString() }; approvals.unshift(item); return item; }
