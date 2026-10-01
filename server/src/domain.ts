@@ -1,6 +1,12 @@
 export type ProjectStatus = 'development' | 'production' | 'post' | 'delivered';
 export type AssetType = 'master' | 'trailer' | 'poster' | 'audio' | 'subtitle';
 export type ApprovalStatus = 'pending' | 'approved' | 'rejected';
+/** 审批更新接口允许的终态决策：白名单为小写枚举，空值、未知值、大小写变体均不合法 */
+export type ApprovalDecision = Extract<ApprovalStatus, 'approved' | 'rejected'>;
+export const APPROVAL_DECISIONS: readonly ApprovalDecision[] = ['approved', 'rejected'];
+export function parseApprovalDecision(value: unknown): ApprovalDecision | undefined {
+  return (APPROVAL_DECISIONS as readonly string[]).includes(value as string) ? value as ApprovalDecision : undefined;
+}
 
 export interface Project { id: string; code: string; title: string; season: number; status: ProjectStatus; currency: string; budgetVersionId: string; deliveryDate: string; }
 export interface BudgetLine { id: string; projectId: string; category: string; subcategory: string; planned: number; committed: number; actual: number; forecast: number; owner: string; risk: 'low' | 'medium' | 'high'; }
@@ -64,9 +70,10 @@ export function rightsConflicts(projectId = projects[0].id) {
   return conflicts;
 }
 
-export function approve(id: string, status: ApprovalStatus, comment = '') {
+export function approve(id: string, status: ApprovalDecision, comment = '') {
   const item = approvals.find(approval => approval.id === id); if (!item) return undefined;
-  item.status = status; item.comment = comment; auditEvents.unshift({ id: `AUD-${Date.now()}`, action: status.toUpperCase(), entity: item.entityType, entityId: item.entityId, actor: '当前审批人', at: new Date().toISOString(), details: comment || `${item.title} 已${status === 'approved' ? '通过' : '驳回'}` }); return item;
+  const decision = parseApprovalDecision(status); if (!decision) throw new Error(`非法审批状态：${String(status)}`);
+  item.status = decision; item.comment = comment; auditEvents.unshift({ id: `AUD-${Date.now()}`, action: decision.toUpperCase(), entity: item.entityType, entityId: item.entityId, actor: '当前审批人', at: new Date().toISOString(), details: comment || `${item.title} 已${decision === 'approved' ? '通过' : '驳回'}` }); return item;
 }
 export function createApproval(input: Pick<Approval, 'projectId' | 'entityType' | 'entityId' | 'title' | 'requestedBy' | 'approver'>) { const item: Approval = { ...input, id: `APR-${Date.now()}`, status: 'pending', createdAt: new Date().toISOString() }; approvals.unshift(item); return item; }
 export function dashboard() { return projects.map(project => projectSummary(project.id)).map(summary => ({ id: summary.project?.id, title: summary.project?.title, status: summary.project?.status, forecast: summary.forecast, variance: summary.variance, pendingApprovals: summary.pendingApprovals, rightsConflicts: rightsConflicts(summary.project?.id).length })); }
